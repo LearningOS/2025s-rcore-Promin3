@@ -14,7 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::MAX_APP_NUM;
+use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
@@ -45,7 +45,8 @@ pub struct TaskManagerInner {
     tasks: [TaskControlBlock; MAX_APP_NUM],
     /// id of current `Running` task
     current_task: usize,
-    syscall_times: [usize; MAX_APP_NUM],
+    /// 每个任务的系统调用数量列表
+    syscall_times: [[usize; MAX_SYSCALL_NUM]; MAX_APP_NUM],
 }
 
 lazy_static! {
@@ -66,7 +67,7 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
-                    syscall_times: [0; MAX_APP_NUM],
+                    syscall_times: [[0; MAX_SYSCALL_NUM]; MAX_APP_NUM],
                 })
             },
         }
@@ -138,20 +139,32 @@ impl TaskManager {
         }
     }
 
-    /// 增加当年的系统调用次数
-    pub fn increase_syscall_times(&self) {
+    /// increase syscall times of current task
+    fn increase_syscall_times(&self, syscall_id: usize) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        inner.syscall_times[current] += 1;
+        inner.syscall_times[current][syscall_id] += 1;
     }
 
-    /// 获取任务调用编号为 id的系统调用次数
-    pub fn get_syscall_times(&self, id: usize) -> usize {
+    /// get syscall times of current task
+    fn get_syscall_times(&self, syscall_id: usize) -> usize {
         let inner = self.inner.exclusive_access();
-        inner.syscall_times[id]
+        let current = inner.current_task;
+        inner.syscall_times[current][syscall_id]
     }
 
+}
 
+// 包裹一下两个系统调用相关的函数
+
+/// Increase syscall times of current task 
+pub fn increase_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.increase_syscall_times(syscall_id);
+}   
+
+/// Get syscall times of current task
+pub fn get_syscall_times(syscall_id: usize) -> usize {
+    TASK_MANAGER.get_syscall_times(syscall_id)
 }
 
 /// Run the first task in task list.
