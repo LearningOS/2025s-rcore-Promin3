@@ -9,6 +9,9 @@ use crate::{
         suspend_current_and_run_next,
     },
 };
+use crate::{
+    mm::{PageTable, VirtAddr}, task::{current_user_token, exit_current_and_run_next, suspend_current_and_run_next}, timer::get_time_us
+};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -106,35 +109,32 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
+    trace!("kernel: sys_get_time");
     -1
 }
 
-/// YOUR JOB: Implement mmap.
+/// TODO: Finish sys_trace to pass testcases
+/// HINT: You might reimplement it with virtual memory management.
+pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
+    trace!("kernel: sys_trace");
+    -1
+}
+
+// YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
+    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
     -1
 }
 
-/// YOUR JOB: Implement munmap.
+// YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
+    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
     -1
 }
-
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
-    trace!("kernel:pid[{}] sys_sbrk", current_task().unwrap().pid.0);
-    if let Some(old_brk) = current_task().unwrap().change_program_brk(size) {
+    trace!("kernel: sys_sbrk");
+    if let Some(old_brk) = change_program_brk(size) {
         old_brk as isize
     } else {
         -1
