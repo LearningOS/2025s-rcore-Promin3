@@ -1,6 +1,6 @@
 //! Process management syscalls
 use crate::{
-    mm::{PageTable, VirtAddr}, task::{current_user_token, exit_current_and_run_next, suspend_current_and_run_next}, timer::get_time_us
+    mm::{PageTable, VirtAddr}, task::{change_program_brk,current_user_token, exit_current_and_run_next, suspend_current_and_run_next}, timer::get_time_us
 };
 
 #[repr(C)]
@@ -56,7 +56,6 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     unsafe {
         *(usec_ppn.get_bytes_array().as_mut_ptr().add(usec_offset) as *mut usize) = usec;
     }
-    
     0
 }
 
@@ -83,5 +82,26 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
                 get_syscall_times(_id) as isize
              },
         _ => { -1 }
+    }
+}
+
+// YOUR JOB: Implement mmap.
+pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+    -1
+}
+
+// YOUR JOB: Implement munmap.
+pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
+    -1
+}
+/// change data segment size
+pub fn sys_sbrk(size: i32) -> isize {
+    trace!("kernel: sys_sbrk");
+    if let Some(old_brk) = change_program_brk(size) {
+        old_brk as isize
+    } else {
+        -1
     }
 }
