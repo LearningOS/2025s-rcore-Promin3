@@ -138,7 +138,6 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     unsafe {
         *(usec_ppn.get_bytes_array().as_mut_ptr().add(usec_offset) as *mut usize) = usec;
     }
-    
     0
 }
 
