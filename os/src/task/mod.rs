@@ -14,6 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
@@ -46,6 +47,7 @@ struct TaskManagerInner {
     tasks: Vec<TaskControlBlock>,
     /// id of current `Running` task
     current_task: usize,
+    syscall_times: Vec<[usize;MAX_SYSCALL_NUM]>
 }
 
 lazy_static! {
@@ -55,8 +57,10 @@ lazy_static! {
         let num_app = get_num_app();
         println!("num_app = {}", num_app);
         let mut tasks: Vec<TaskControlBlock> = Vec::new();
+        let mut syscall_times:Vec<[usize;MAX_SYSCALL_NUM]> = Vec::new();
         for i in 0..num_app {
             tasks.push(TaskControlBlock::new(get_app_data(i), i));
+            syscall_times.push([0;MAX_SYSCALL_NUM]);
         }
         TaskManager {
             num_app,
@@ -64,6 +68,7 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
+                    syscall_times
                 })
             },
         }
@@ -71,6 +76,13 @@ lazy_static! {
 }
 
 impl TaskManager {
+
+    fn increase_syscall_times(&self){
+
+    }
+
+
+    
     /// Run the first task in task list.
     ///
     /// Generally, the first task in task list is an idle task (we call it zero process later).
