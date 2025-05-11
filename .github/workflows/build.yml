@@ -39,7 +39,6 @@ jobs:
           # 删除或重置全局配置
           rm ${CARGO_HOME}/config.toml || true
           rm -rf rm ${CARGO_HOME}/registry/* || true
-          cargo install cargo-binutils —locked
       - uses: actions/checkout@v4
       - name: Run tests
         run: |
