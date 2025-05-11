@@ -117,6 +117,12 @@ pub fn frame_dealloc(ppn: PhysPageNum) {
     FRAME_ALLOCATOR.exclusive_access().dealloc(ppn);
 }
 
+/// Get the number of free frames
+pub fn free_frames_cnt()-> usize {
+    let inner = FRAME_ALLOCATOR.exclusive_access();
+    inner.end - inner.current + inner.recycled.len()
+}
+
 #[allow(unused)]
 /// a simple test for frame allocator
 pub fn frame_allocator_test() {

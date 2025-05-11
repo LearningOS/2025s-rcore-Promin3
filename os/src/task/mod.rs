@@ -36,18 +36,19 @@ pub use context::TaskContext;
 /// existing functions on `TaskManager`.
 pub struct TaskManager {
     /// total number of tasks
-    num_app: usize,
+    pub num_app: usize,
     /// use inner value to get mutable access
-    inner: UPSafeCell<TaskManagerInner>,
+    pub inner: UPSafeCell<TaskManagerInner>,
 }
 
 /// The task manager inner in 'UPSafeCell'
-struct TaskManagerInner {
+pub struct TaskManagerInner {
     /// task list
-    tasks: Vec<TaskControlBlock>,
+    pub tasks: Vec<TaskControlBlock>,
     /// id of current `Running` task
-    current_task: usize,
-    syscall_times: Vec<[usize;MAX_SYSCALL_NUM]>
+    pub current_task: usize,
+    /// syscall times of each task
+    pub syscall_times: Vec<[usize;MAX_SYSCALL_NUM]>
 }
 
 lazy_static! {
@@ -76,13 +77,20 @@ lazy_static! {
 }
 
 impl TaskManager {
-
-    fn increase_syscall_times(&self){
-
+    /// Increase the times of a syscall
+    fn increase_syscall_times(&self, syscall_id: usize){
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.syscall_times[cur][syscall_id] += 1;
     }
 
+    /// Get the times of a syscall  
+    fn get_syscall_times(&self, syscall_id: usize) -> usize{
+        let inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.syscall_times[cur][syscall_id]
+    }
 
-    
     /// Run the first task in task list.
     ///
     /// Generally, the first task in task list is an idle task (we call it zero process later).
@@ -165,6 +173,16 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+}
+
+/// Get the times of a syscall
+pub fn get_syscall_times(syscall_id: usize) -> usize {
+    TASK_MANAGER.get_syscall_times(syscall_id)
+}   
+
+/// Increase the times of a syscall
+pub fn increase_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.increase_syscall_times(syscall_id);
 }
 
 /// Run the first task in task list.
