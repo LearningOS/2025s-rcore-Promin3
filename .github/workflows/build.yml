@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run tests
         run: |
-          cargo install cargo-binutils —locked
+          cargo install cargo-binutils —-locked
           qemu-system-riscv64 --version
           rustup target add riscv64gc-unknown-none-elf
           git config --global --add safe.directory /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}
