@@ -1,6 +1,6 @@
 //! Process management syscalls
 use crate::{
-    config::PAGE_SIZE, mm::{free_frames_cnt, MapPermission, PageTable, VPNRange, VirtAddr, VirtPageNum}, task::{
+    config::PAGE_SIZE, mm::{free_frames_cnt, MapPermission, PageTable, VPNRange, VirtAddr,}, task::{
         change_program_brk, current_user_token, exit_current_and_run_next, get_syscall_times,
         suspend_current_and_run_next, TASK_MANAGER,
     }, timer::get_time_us
@@ -111,18 +111,12 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap");
-    if VirtAddr::from(_start).page_offset() != 0 {
-        error!("sys_mmap: start address is not page-aligned");
-        return -1;
-    }   
-
-    if _port & !0x7 != 0 {
-        error!("sys_mmap: invalid port");
+    if ! VirtAddr::from(_start).aligned(){
         return -1;
     }
-
-    if _port & 0x7 == 0 {
-        error!("sys_mmap: meaningless memory mapping");
+    
+    if _port & !0x7 != 0 || _port & 0x7 == 0 {
+        error!("sys_mmap: invalid port");
         return -1;
     }
 
@@ -134,7 +128,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     let mut inner = TASK_MANAGER.inner.exclusive_access();
     let cur = inner.current_task;
     let mem_set = &mut inner.tasks[cur].memory_set;
-    let start_vpn = VirtPageNum::from(_start);
+    let start_vpn = VirtAddr::from(_start).floor();
     let end_vpn = VirtAddr::from(_start + _len).ceil();
     let range = VPNRange::new(start_vpn, end_vpn);
     
@@ -169,15 +163,14 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap");
-    if VirtAddr::from(_start).page_offset() != 0 {
-        error!("sys_munmap: start address is not page-aligned");
+    if ! VirtAddr::from(_start).aligned(){
         return -1;
     }
 
     let mut inner = TASK_MANAGER.inner.exclusive_access();
     let cur = inner.current_task;
     let mem_set = &mut inner.tasks[cur].memory_set;
-    let start_vpn = VirtPageNum::from(_start);
+    let start_vpn = VirtAddr::from(_start).floor();
     let end_vpn = VirtAddr::from(_start + _len).ceil();
     let range = VPNRange::new(start_vpn, end_vpn);
 
