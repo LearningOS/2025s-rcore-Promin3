@@ -1,15 +1,15 @@
 //! Process management syscalls
-//!
-use alloc::sync::Arc;
+use alloc::{sync::Arc};
 
 use crate::{
     fs::{open_file, OpenFlags},
-    mm::{translated_refmut, translated_str, PageTable, VirtAddr},
+    mm::{translated_refmut, translated_str, PageTable, VirtAddr,free_frames_cnt,MapPermission, VPNRange},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next,
+        suspend_current_and_run_next
     },
-    timer::get_time_us
+    timer::get_time_us,
+    config::PAGE_SIZE, 
 };
 
 #[repr(C)]
@@ -114,16 +114,15 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     let us = get_time_us();
     let sec = us / 1_000_000;
     let usec = us % 1_000_000;
-    
 
     let time_val_vir_addr = VirtAddr::from(ts as usize);
     let token = current_user_token();
     let page_table = PageTable::from_token(token);
-    
+
     // 拆分成单独字段处理
     let sec_vir_addr = time_val_vir_addr;
     let usec_vir_addr = VirtAddr::from((ts as usize) + core::mem::size_of::<usize>());
-    
+
     // 获取sec字段的物理地址
     let sec_vpn = sec_vir_addr.floor();
     let sec_ppn = page_table.translate(sec_vpn).unwrap().ppn();
@@ -141,22 +140,100 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     0
 }
 
-/// YOUR JOB: Implement mmap.
+
+// YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_mmap",
         current_task().unwrap().pid.0
     );
-    -1
+
+    if VirtAddr::from(_start).page_offset() != 0 {
+        error!("sys_mmap: start address is not page-aligned");
+        return -1;
+    }   
+
+    if _port & !0x7 != 0 {
+        error!("sys_mmap: invalid port");
+        return -1;
+    }
+
+    if _port & 0x7 == 0 {
+        error!("sys_mmap: meaningless memory mapping");
+        return -1;
+    }
+
+    if  free_frames_cnt() < (_len + PAGE_SIZE -1) / PAGE_SIZE {
+        error!("sys_mmap: not enough free frames");
+        return -1;  
+    }
+
+    let task = current_task().unwrap();
+    let mut tcb_inner = task.inner_exclusive_access();
+    let mem_set = &mut tcb_inner.memory_set;
+    let start_vpn = VirtAddr::from(_start).floor();
+    let end_vpn = VirtAddr::from(_start + _len).ceil();
+    let range = VPNRange::new(start_vpn, end_vpn);
+    
+    for vpn in range {
+        if let Some(pte) = mem_set.translate(vpn) {
+            if pte.is_valid() {
+                error!("sys_mmap: address already mapped");
+                return -1;
+            }
+        }
+    }
+
+    let mut permission = MapPermission::U;
+    if _port & 0x1 != 0 {
+        permission |= MapPermission::R;
+    }
+    if _port & 0x2 != 0 {
+        permission |= MapPermission::W; 
+    }
+    if _port & 0x4 != 0 {
+        permission |= MapPermission::X; 
+    }
+
+    mem_set.insert_framed_area(
+        start_vpn.into(),
+        end_vpn.into(),
+        permission,
+    );
+    0
 }
 
 /// YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+
     trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_munmap",
         current_task().unwrap().pid.0
     );
-    -1
+    
+    if VirtAddr::from(_start).page_offset() != 0 {
+        error!("sys_munmap: start address is not page-aligned");
+        return -1;
+    }
+
+    let task = current_task().unwrap();
+    let mut tcb_inner = task.inner_exclusive_access();
+    let mem_set = &mut tcb_inner.memory_set;
+    let start_vpn = VirtAddr::from(_start).floor();
+    let end_vpn = VirtAddr::from(_start + _len).ceil();
+    let range = VPNRange::new(start_vpn, end_vpn);
+
+    for vpn in range {
+        if let Some(pte) = mem_set.translate(vpn) {
+            if !pte.is_valid() {
+                error!("sys_munmap: address not mapped");
+                return -1;
+            }
+        }
+    }
+
+    mem_set.remove_area_with_start_vpn(start_vpn.into());
+    0
 }
 
 /// change data segment size
