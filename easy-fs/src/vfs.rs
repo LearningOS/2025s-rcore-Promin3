@@ -146,18 +146,14 @@ impl Inode {
 
     /// hardlink in fs
     pub fn linkat(&self, old_name: &str, new_name: &str){
-        let mut fs = self.fs.lock();
-        let inode_id = self.read_disk_inode(|root_inode| {
-            self.find_inode_id(old_name, root_inode)
-        }).expect("linkat: old_name not found");
 
-        let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id);
-        let old_inode = Inode::new(block_id, block_offset, self.fs.clone(), self.block_device.clone());
-
+        let old_inode = self.find(old_name).unwrap();
         old_inode.modify_disk_inode(|disk_inode:&mut DiskInode|{
             disk_inode.add_nlink();
         });
 
+        let mut fs = self.fs.lock();
+        let inode_id = fs.get_inode_id(old_inode.block_id, old_inode.block_offset) as u32;
         self.modify_disk_inode(|root_inode| {
             // append file in the dirent
             let file_count = (root_inode.size as usize) / DIRENT_SZ;
@@ -178,7 +174,6 @@ impl Inode {
 
     /// unlink in fs
     pub fn unlinkat(&self, name: &str) -> isize {
-        let mut fs = self.fs.lock();
         if let Some(inode) = self.find(name)
         {
             let nlink = inode.modify_disk_inode(|disk_inode:&mut DiskInode|{
@@ -186,6 +181,7 @@ impl Inode {
                 disk_inode.nlink
             });
 
+            let mut fs = self.fs.lock();
             if nlink == 0 {
                 inode.modify_disk_inode(|disk_inode:&mut DiskInode|{
                     let size = disk_inode.size;
@@ -195,6 +191,9 @@ impl Inode {
                         fs.dealloc_data(data_block);
                     }
                 });
+
+                let inode_id = fs.get_inode_id(inode.block_id, inode.block_offset);
+                fs.dealloc_inode(inode_id as u32);
             }
             // remove dirent
             self.modify_disk_inode(|root_node: &mut DiskInode|{
