@@ -13,6 +13,10 @@ use alloc::vec::Vec;
 use bitflags::*;
 use easy_fs::{EasyFileSystem, Inode};
 use lazy_static::*;
+use core::any::Any;
+use super::Stat;
+use super::StatMode;
+
 
 /// inode in memory
 /// A wrapper around a filesystem inode
@@ -52,6 +56,23 @@ impl OSInode {
             v.extend_from_slice(&buffer[..len]);
         }
         v
+    }
+
+    /// stat of os inode
+    pub fn stat(&self) -> Stat {
+        let inner = self.inner.exclusive_access();
+        let stat = inner.inode.stat();
+        Stat {
+            dev: 0,
+            ino: stat.ino,
+            mode: if inner.inode.is_dir() {
+                StatMode::DIR
+            } else {
+                StatMode::FILE  
+            },
+            nlink: stat.nlink as u32,
+            pad: [0; 7],
+        }
     }
 }
 
@@ -125,6 +146,17 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+/// hardlink in os
+pub fn linkat(oldname: &str, newname: &str){
+    ROOT_INODE.linkat(oldname, newname);
+}
+
+/// unlink in os
+pub fn unlinkat(name: &str)-> isize {
+    ROOT_INODE.unlinkat(name)
+}
+
+
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable
@@ -155,5 +187,9 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

@@ -82,6 +82,7 @@ type DataBlock = [u8; BLOCK_SZ];
 #[repr(C)]
 pub struct DiskInode {
     pub size: u32,
+    pub nlink: u32,
     pub direct: [u32; INODE_DIRECT_COUNT],
     pub indirect1: u32,
     pub indirect2: u32,
@@ -93,11 +94,24 @@ impl DiskInode {
     /// indirect1 and indirect2 block are allocated only when they are needed
     pub fn initialize(&mut self, type_: DiskInodeType) {
         self.size = 0;
+        self.nlink = 1;
         self.direct.iter_mut().for_each(|v| *v = 0);
         self.indirect1 = 0;
         self.indirect2 = 0;
         self.type_ = type_;
     }
+
+    /// increase number of links by 1
+    pub fn add_nlink(&mut self) {
+        self.nlink += 1;
+    }
+
+    /// decrease number of links by 1
+    pub fn dec_nlink(&mut self) {
+        assert!(self.nlink >= 1);
+        self.nlink -= 1;
+    }
+
     /// Whether this inode is a directory
     pub fn is_dir(&self) -> bool {
         self.type_ == DiskInodeType::Directory
