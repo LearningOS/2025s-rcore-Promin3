@@ -1,10 +1,11 @@
 use crate::{
     fs::{open_file, OpenFlags},
-    mm::{translated_ref, translated_refmut, translated_str},
+    mm::{translated_ref, translated_refmut, translated_str,VirtAddr, PageTable},
     task::{
         current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
         suspend_current_and_run_next, SignalFlags,
     },
+    timer::get_time_us,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 
@@ -151,12 +152,38 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!(
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().process.upgrade().unwrap().getpid()
     );
-    -1
+    let us = get_time_us();
+    let sec = us / 1_000_000;
+    let usec = us % 1_000_000;
+
+    let time_val_vir_addr = VirtAddr::from(ts as usize);
+    let token = current_user_token();
+    let page_table = PageTable::from_token(token);
+
+    // 拆分成单独字段处理
+    let sec_vir_addr = time_val_vir_addr;
+    let usec_vir_addr = VirtAddr::from((ts as usize) + core::mem::size_of::<usize>());
+
+    // 获取sec字段的物理地址
+    let sec_vpn = sec_vir_addr.floor();
+    let sec_ppn = page_table.translate(sec_vpn).unwrap().ppn();
+    let sec_offset = sec_vir_addr.page_offset();
+    unsafe {
+        *(sec_ppn.get_bytes_array().as_mut_ptr().add(sec_offset) as *mut usize) = sec;
+    }
+    // 获取usec字段的物理地址
+    let usec_vpn = usec_vir_addr.floor();
+    let usec_ppn = page_table.translate(usec_vpn).unwrap().ppn();
+    let usec_offset = usec_vir_addr.page_offset();
+    unsafe {
+        *(usec_ppn.get_bytes_array().as_mut_ptr().add(usec_offset) as *mut usize) = usec;
+    }
+    0
 }
 
 /// mmap syscall

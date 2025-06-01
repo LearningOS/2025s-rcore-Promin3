@@ -14,6 +14,7 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
+use crate::sync::DeadlockDetect;
 
 /// Process Control Block
 pub struct ProcessControlBlock {
@@ -49,6 +50,12 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// mutex_deadlock_detect
+    pub mutex_deadlock_detect:DeadlockDetect,
+    /// semaphore_deadlock_detect
+    pub semaphore_deadlock_detect:DeadlockDetect,
+    /// is deadlock detected?
+    pub is_deadlock_detected: bool,
 }
 
 impl ProcessControlBlockInner {
@@ -119,6 +126,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    mutex_deadlock_detect: DeadlockDetect::new(),
+                    semaphore_deadlock_detect: DeadlockDetect::new(),
+                    is_deadlock_detected: false,
                 })
             },
         });
@@ -144,6 +154,8 @@ impl ProcessControlBlock {
         // add main thread to the process
         let mut process_inner = process.inner_exclusive_access();
         process_inner.tasks.push(Some(Arc::clone(&task)));
+        process_inner.mutex_deadlock_detect.add_thread(0);
+        process_inner.semaphore_deadlock_detect.add_thread(0);
         drop(process_inner);
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
         // add main thread to scheduler
@@ -166,6 +178,9 @@ impl ProcessControlBlock {
         // since memory_set has been changed
         trace!("kernel: exec .. alloc user resource for main thread again");
         let task = self.inner_exclusive_access().get_task(0);
+        // exec 时原线程的 mutex 和 semaphore 需要被释放
+        self.inner_exclusive_access().mutex_deadlock_detect.release_thread(0);
+        self.inner_exclusive_access().semaphore_deadlock_detect.release_thread(0);
         let mut task_inner = task.inner_exclusive_access();
         task_inner.res.as_mut().unwrap().ustack_base = ustack_base;
         task_inner.res.as_mut().unwrap().alloc_user_res();
@@ -245,6 +260,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    mutex_deadlock_detect: DeadlockDetect::new(),
+                    semaphore_deadlock_detect: DeadlockDetect::new(),
+                    is_deadlock_detected: false,
                 })
             },
         });
@@ -267,6 +285,8 @@ impl ProcessControlBlock {
         // attach task to child process
         let mut child_inner = child.inner_exclusive_access();
         child_inner.tasks.push(Some(Arc::clone(&task)));
+        child_inner.mutex_deadlock_detect.add_thread(0);
+        child_inner.semaphore_deadlock_detect.add_thread(0);
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
         let task_inner = task.inner_exclusive_access();
